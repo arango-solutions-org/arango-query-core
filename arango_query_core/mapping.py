@@ -87,9 +87,49 @@ def _is_structural_vci(index_type: str, fields: tuple[str, ...]) -> bool:
     return any(f not in _SYSTEM_INDEX_FIELDS for f in fields)
 
 
+def _has_array_expansion(fields: tuple[str, ...]) -> bool:
+    """True when any indexed field is an array expansion (``labels[*]``).
+
+    A persistent index stores one entry per array element, and a traversal
+    scans every entry under the ``_from`` / ``_to`` prefix, so a traversal that
+    uses such an index returns each edge once per element -- inflated counts,
+    no error. The index is still correct for a pattern-match lookup
+    (``FOR e IN edges FILTER e._from == ...``), but never for a traversal hint.
+    """
+    return any("[*]" in f for f in fields)
+
+
+def _analyzer_unsafe_index_fields(mapping: JsonObj) -> set[tuple[str, ...]]:
+    """Field tuples the schema analyzer marked ``traversalSafe: false``.
+
+    arangodb-schema-analyzer (0.15.2+) records its verdict per relationship
+    under ``vci.indexLevel.indexes``; ``traversalSafe`` is present only when
+    false. Older exports carry no verdict, so absence means "no opinion" and
+    the local :func:`_has_array_expansion` check still applies.
+    """
+    vci = mapping.get("vci")
+    index_level = vci.get("indexLevel") if isinstance(vci, dict) else None
+    indexes = index_level.get("indexes") if isinstance(index_level, dict) else None
+    if not isinstance(indexes, list):
+        return set()
+    unsafe: set[tuple[str, ...]] = set()
+    for entry in indexes:
+        if not isinstance(entry, dict) or entry.get("traversalSafe") is not False:
+            continue
+        fields = entry.get("fields")
+        if isinstance(fields, list):
+            unsafe.add(tuple(str(f) for f in fields))
+    return unsafe
+
+
 @dataclass(frozen=True)
 class IndexInfo:
-    """Metadata for a single index on a collection."""
+    """Metadata for a single index on a collection.
+
+    ``traversal_safe`` is False when a traversal must not use the index
+    (array-expanded fields, or the schema analyzer's ``traversalSafe: false``
+    verdict). Such an index is never ``vci``, whatever its shape or flags.
+    """
 
     type: str
     fields: tuple[str, ...]
@@ -98,6 +138,7 @@ class IndexInfo:
     name: str = ""
     vci: bool = False
     deduplicate: bool = False
+    traversal_safe: bool = True
 
 
 @dataclass(frozen=True)
@@ -573,6 +614,7 @@ class MappingResolver:
         if not isinstance(indexes_raw, list):
             return []
 
+        unsafe = _analyzer_unsafe_index_fields(mapping)
         result: list[IndexInfo] = []
         for idx in indexes_raw:
             if not isinstance(idx, dict):
@@ -583,6 +625,8 @@ class MappingResolver:
             else:
                 continue
             index_type = str(idx.get("type", "persistent"))
+            traversal_safe = fields not in unsafe and not _has_array_expansion(fields)
+            vci = bool(idx.get("vci", False)) or _is_structural_vci(index_type, fields)
             result.append(
                 IndexInfo(
                     type=index_type,
@@ -590,8 +634,9 @@ class MappingResolver:
                     unique=bool(idx.get("unique", False)),
                     sparse=bool(idx.get("sparse", False)),
                     name=str(idx.get("name", "")),
-                    vci=bool(idx.get("vci", False)) or _is_structural_vci(index_type, fields),
+                    vci=vci and traversal_safe,
                     deduplicate=bool(idx.get("deduplicate", False)),
+                    traversal_safe=traversal_safe,
                 )
             )
         return result

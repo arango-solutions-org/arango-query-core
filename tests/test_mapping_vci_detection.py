@@ -86,3 +86,61 @@ class TestResolverStructuralVci:
     def test_no_indexes_means_no_vci(self) -> None:
         b = _bundle_with_edge_indexes([])
         assert MappingResolver(b).has_vci("REL") is False
+
+
+class TestArrayExpandedIndexIsNotTraversalSafe:
+    """An edge index with an array-expanded field must never be hinted in a traversal.
+
+    A persistent index stores one entry per array element and a traversal scans
+    every entry under the _from/_to prefix, so ``[_from, type, toLabels[*]]``
+    returns each edge once per label (measured on ArangoDB 3.12.9: 20 labels
+    per edge -> 20x the rows at one hop, 400x at two). r2g provisions this shape
+    when ``LpgLayout.index_edge_labels`` is on.
+    """
+
+    def test_array_expanded_index_is_not_vci(self) -> None:
+        b = _bundle_with_edge_indexes(
+            [{"type": "persistent", "fields": ["_from", "type", "toLabels[*]"], "name": "lbl"}]
+        )
+        r = MappingResolver(b)
+        (idx,) = r.resolve_indexes("REL")
+        assert idx.traversal_safe is False
+        assert idx.vci is False
+        assert r.has_vci("REL") is False
+
+    def test_explicit_flag_does_not_override_array_expansion(self) -> None:
+        b = _bundle_with_edge_indexes(
+            [{"type": "persistent", "fields": ["_from", "toLabels[*]"], "name": "lbl", "vci": True}]
+        )
+        assert MappingResolver(b).has_vci("REL") is False
+
+    def test_safe_index_still_vci_alongside_risky_one(self) -> None:
+        b = _bundle_with_edge_indexes(
+            [
+                {"type": "persistent", "fields": ["_from", "type"], "name": "flat"},
+                {"type": "persistent", "fields": ["_from", "type", "toLabels[*]"], "name": "lbl"},
+            ]
+        )
+        by_name = {i.name: i for i in MappingResolver(b).resolve_indexes("REL")}
+        assert by_name["flat"].vci is True and by_name["flat"].traversal_safe is True
+        assert by_name["lbl"].vci is False
+
+    def test_analyzer_verdict_is_honored(self) -> None:
+        # The schema analyzer's traversalSafe: false wins even for a shape the
+        # local check would accept -- its verdict is the source of truth.
+        b = _bundle_with_edge_indexes([{"type": "persistent", "fields": ["_from", "type"], "name": "flat"}])
+        b.physical_mapping["relationships"]["REL"]["vci"] = {
+            "indexLevel": {"indexes": [{"fields": ["_from", "type"], "traversalSafe": False}]}
+        }
+        (idx,) = MappingResolver(b).resolve_indexes("REL")
+        assert idx.traversal_safe is False and idx.vci is False
+
+    def test_analyzer_block_without_verdict_keeps_safe_index(self) -> None:
+        # Exports before analyzer 0.15.2 have a vci block but no traversalSafe:
+        # absence is "no opinion", not "unsafe".
+        b = _bundle_with_edge_indexes([{"type": "persistent", "fields": ["_from", "type"], "name": "flat"}])
+        b.physical_mapping["relationships"]["REL"]["vci"] = {
+            "indexLevel": {"indexes": [{"fields": ["_from", "type"], "discriminatorFields": ["type"]}]}
+        }
+        (idx,) = MappingResolver(b).resolve_indexes("REL")
+        assert idx.traversal_safe is True and idx.vci is True

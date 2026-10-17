@@ -6,6 +6,32 @@ exact versions (contextual-data-fabric CC-9) and re-run their golden /
 eval suites on every bump — pre-1.0, **minor** bumps may break the API
 and this file must say so explicitly.
 
+## [Unreleased]
+
+### Fixed
+
+- **Traversals no longer hint an array-expanded edge index.** `resolve_indexes`
+  treated any edge index led by `_from` / `_to` as a vertex-centric index, so
+  `[_from, type, toLabels[*]]` (r2g's opt-in `LpgLayout.index_edge_labels`
+  shape) could become arango-cypher-py's traversal `indexHint`. A persistent
+  index stores one entry per array element and a traversal scans all of them,
+  so the hinted traversal returned each edge once per label -- inflated counts,
+  no error (measured on ArangoDB 3.12.9: 20x the rows at one hop, 400x at two).
+  Such an index is now never `vci`, even with an explicit `vci: true` flag. With
+  only that index, arango-cypher-py reports a missing VCI instead of hinting it;
+  next to a flat `[_from, type]` index, the flat one is hinted, whatever the
+  order.
+- **The schema analyzer's verdict is honored.** When a relationship mapping
+  carries arangodb-schema-analyzer's `vci.indexLevel.indexes[].traversalSafe:
+  false` (analyzer 0.15.2+), that index is not traversal-safe, whatever its
+  shape. Older exports carry no verdict; the local array-expansion check still
+  applies to them.
+
+### Added
+
+- `IndexInfo.traversal_safe` (default `True`): False when a traversal must not
+  use the index. Additive; existing callers are unaffected.
+
 ## [0.2.1] - 2026-10-16
 
 ### Fixed
