@@ -80,6 +80,13 @@ class RelationshipStats:
 # no user-property selectivity on their own.
 _SYSTEM_INDEX_FIELDS: frozenset[str] = frozenset({"_from", "_to", "_id", "_key", "_rev"})
 
+# Catch-all key under ``entities`` / ``relationships``: a label or type with no
+# entry of its own resolves to it. Used with the ``LABELS`` entity style
+# (``{"collectionName": ..., "style": "LABELS", "labelsField": "labels"}``),
+# where documents in a shared collection carry an array of label strings, so an
+# undeclared label resolves to the shared collection and simply matches nothing.
+CATCH_ALL_KEY = "*"
+
 
 def _is_structural_vci(index_type: str, fields: tuple[str, ...]) -> bool:
     """Detect a vertex-centric index by *structure*, not just an explicit flag.
@@ -384,6 +391,9 @@ class MappingResolver:
             )
             if normalized is not None:
                 return normalized
+            catch_all = entities.get(CATCH_ALL_KEY)
+            if isinstance(catch_all, dict):
+                return catch_all
             available = sorted(entities.keys()) if entities else []
             hint = (
                 f". Available entities: {', '.join(available)}"
@@ -409,6 +419,9 @@ class MappingResolver:
             )
             if normalized is not None:
                 return normalized
+            catch_all = rels.get(CATCH_ALL_KEY)
+            if isinstance(catch_all, dict):
+                return catch_all
             available = sorted(rels.keys()) if rels else []
             hint = (
                 f". Available relationships: {', '.join(available)}"
@@ -776,12 +789,12 @@ class MappingResolver:
     def all_entity_labels(self) -> list[str]:
         """Return all entity type labels defined in the mapping."""
         entities = self.bundle.physical_mapping.get("entities", {})
-        return list(entities.keys()) if isinstance(entities, dict) else []
+        return [k for k in entities if k != CATCH_ALL_KEY] if isinstance(entities, dict) else []
 
     def all_relationship_types(self) -> list[str]:
         """Return all relationship type names defined in the mapping."""
         rels = self.bundle.physical_mapping.get("relationships", {})
-        return list(rels.keys()) if isinstance(rels, dict) else []
+        return [k for k in rels if k != CATCH_ALL_KEY] if isinstance(rels, dict) else []
 
     def all_edge_collections(self) -> list[str]:
         """Return distinct edge collection names from the physical mapping."""
@@ -833,6 +846,8 @@ class MappingResolver:
             if emap.get("typeField"):
                 ent["typeField"] = emap["typeField"]
                 ent["typeValue"] = emap.get("typeValue", "")
+            if emap.get("labelsField"):
+                ent["labelsField"] = emap["labelsField"]
             est = entity_stats.get(label, {})
             if isinstance(est, dict) and "estimated_count" in est:
                 ent["estimatedCount"] = est["estimated_count"]

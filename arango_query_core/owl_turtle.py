@@ -35,6 +35,7 @@ def mapping_to_turtle(bundle: MappingBundle) -> str:
     lines.append("phys:collectionName a owl:AnnotationProperty .")
     lines.append("phys:typeField a owl:AnnotationProperty .")
     lines.append("phys:typeValue a owl:AnnotationProperty .")
+    lines.append("phys:labelsField a owl:AnnotationProperty .")
     lines.append("phys:edgeCollectionName a owl:AnnotationProperty .")
     lines.append("")
 
@@ -62,6 +63,8 @@ def mapping_to_turtle(bundle: MappingBundle) -> str:
                 lines.append(f':{name} phys:typeField "{tf}" .')
             if tv:
                 lines.append(f':{name} phys:typeValue "{tv}" .')
+        elif style == "LABELS" and emap.get("labelsField"):
+            lines.append(f':{name} phys:labelsField "{emap["labelsField"]}" .')
         if style == "MULTI_LABEL":
             for annot in ("labelsField", "labelValue"):
                 if emap.get(annot):
@@ -199,9 +202,9 @@ def turtle_to_mapping(turtle: str) -> MappingBundle:
             "collectionName",
             "typeField",
             "typeValue",
+            "labelsField",
             "edgeCollectionName",
             "attributeName",
-            "labelsField",
             "labelValue",
         ):
             m_a = re.match(rf':(\w+)\s+phys:{annot}\s+"([^"]+)"', stripped)
@@ -230,6 +233,8 @@ def turtle_to_mapping(turtle: str) -> MappingBundle:
         if style == "LABEL":
             pm_entry["typeField"] = ann.get("typeField", "type")
             pm_entry["typeValue"] = ann.get("typeValue", name)
+        elif style == "LABELS":
+            pm_entry["labelsField"] = ann.get("labelsField", "labels")
         if style == "MULTI_LABEL":
             pm_entry["labelsField"] = ann.get("labelsField", "labels")
             pm_entry["labelValue"] = ann.get("labelValue", name)

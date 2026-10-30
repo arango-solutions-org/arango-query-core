@@ -105,6 +105,9 @@ def parse_owl_with_rdflib(turtle_text: str) -> MappingBundle:
                 pm_entry["typeField"] = str(type_field)
             if type_value:
                 pm_entry["typeValue"] = str(type_value)
+            labels_field = g.value(cls, PHYS.labelsField)
+            if labels_field:
+                pm_entry["labelsField"] = str(labels_field)
             for prop_name, field in fields.get(name, {}).items():
                 pm_entry["properties"][prop_name] = {"field": field}
             physical_entities[name] = pm_entry

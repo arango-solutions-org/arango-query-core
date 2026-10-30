@@ -6,6 +6,25 @@ exact versions (contextual-data-fabric CC-9) and re-run their golden /
 eval suites on every bump — pre-1.0, **minor** bumps may break the API
 and this file must say so explicitly.
 
+## [Unreleased]
+
+### Added
+
+- `LABELS` entity style: `{"style": "LABELS", "collectionName": "nodes", "labelsField": "labels"}`
+  keeps a node's labels in an array field of a shared collection, so a node can
+  carry several labels (Neo4j-shaped data; the label predicate is
+  `"Label" IN doc.labels`). `resolve_entity` returns it unchanged,
+  `schema_summary` reports `labelsField`, and the OWL Turtle export/import and
+  the rdflib import carry `phys:labelsField`. Shared with arango-gql-gateway,
+  so a mapping from either tool works in either. Distinct from `MULTI_LABEL`
+  (0.2.5, below): `LABELS` is a plain entity whose own declared name is the
+  array value to match; `MULTI_LABEL` is a supertype matching a separate,
+  explicit `labelValue` across its members' shared collection.
+- `CATCH_ALL_KEY` (`"*"`): a `*` key under `entities` or `relationships`
+  resolves any label or type with no entry of its own, after exact and
+  normalized lookup. It is not listed by `all_entity_labels` /
+  `all_relationship_types`. Bundles without a `*` key behave as before.
+
 ## [0.2.6] - 2026-10-29
 
 ### Added
