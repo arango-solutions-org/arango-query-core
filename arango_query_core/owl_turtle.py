@@ -65,6 +65,13 @@ def mapping_to_turtle(bundle: MappingBundle) -> str:
                 lines.append(f':{name} phys:typeValue "{tv}" .')
         elif style == "LABELS" and emap.get("labelsField"):
             lines.append(f':{name} phys:labelsField "{emap["labelsField"]}" .')
+        if style == "MULTI_LABEL":
+            for annot in ("labelsField", "labelValue"):
+                if emap.get(annot):
+                    lines.append(f':{name} phys:{annot} "{emap[annot]}" .')
+        # A supertype's members are its OWL subclasses.
+        for member in emap.get("members") or entity_def.get("subtypes") or []:
+            lines.append(f":{member} rdfs:subClassOf :{name} .")
 
         for prop in entity_def.get("properties", []):
             pname = prop.get("name", "")
@@ -130,6 +137,7 @@ def turtle_to_mapping(turtle: str) -> MappingBundle:
     obj_props: dict[str, dict[str, str]] = {}
     data_props: list[dict[str, Any]] = []
     annotations: dict[str, dict[str, str]] = {}
+    subclasses: dict[str, list[str]] = {}  # supertype -> member classes (rdfs:subClassOf)
 
     current_subject: str | None = None
     current_kind: str | None = None  # "class", "objprop", "dataprop"
@@ -151,6 +159,11 @@ def turtle_to_mapping(turtle: str) -> MappingBundle:
             current_subject = m_objprop.group(1)
             current_kind = "objprop"
             obj_props.setdefault(current_subject, {})
+            continue
+
+        m_sub = re.match(r":(\w+)\s+rdfs:subClassOf\s+:(\w+)\s*\.", stripped)
+        if m_sub:
+            subclasses.setdefault(m_sub.group(2), []).append(m_sub.group(1))
             continue
 
         m_dataprop = re.match(r":(\w+)\s+a\s+owl:DatatypeProperty", stripped)
@@ -192,6 +205,7 @@ def turtle_to_mapping(turtle: str) -> MappingBundle:
             "labelsField",
             "edgeCollectionName",
             "attributeName",
+            "labelValue",
         ):
             m_a = re.match(rf':(\w+)\s+phys:{annot}\s+"([^"]+)"', stripped)
             if m_a:
@@ -204,17 +218,26 @@ def turtle_to_mapping(turtle: str) -> MappingBundle:
     for name in classes:
         own = [dp for dp in data_props if name in dp["domains"]]
         props = [{"name": dp["name"], "type": _from_xsd_type(dp.get("range", "xsd:string"))} for dp in own]
-        entities_cs.append({"name": name, "labels": [name], "properties": props})
+        cs_entry: dict[str, Any] = {"name": name, "labels": [name], "properties": props}
+        if subclasses.get(name):
+            cs_entry["subtypes"] = list(subclasses[name])
+        entities_cs.append(cs_entry)
         ann = annotations.get(name, {})
-        pm_entry: dict[str, Any] = {
-            "style": ann.get("mappingStyle", "COLLECTION"),
-            "collectionName": ann.get("collectionName", name.lower() + "s"),
-        }
-        if pm_entry["style"] == "LABEL":
+        style = ann.get("mappingStyle", "COLLECTION")
+        pm_entry: dict[str, Any] = {"style": style}
+        if style == "UNION":
+            # A UNION supertype has no collection of its own; its members are its subclasses.
+            pm_entry["members"] = list(subclasses.get(name, []))
+        else:
+            pm_entry["collectionName"] = ann.get("collectionName", name.lower() + "s")
+        if style == "LABEL":
             pm_entry["typeField"] = ann.get("typeField", "type")
             pm_entry["typeValue"] = ann.get("typeValue", name)
-        elif pm_entry["style"] == "LABELS":
+        elif style == "LABELS":
             pm_entry["labelsField"] = ann.get("labelsField", "labels")
+        if style == "MULTI_LABEL":
+            pm_entry["labelsField"] = ann.get("labelsField", "labels")
+            pm_entry["labelValue"] = ann.get("labelValue", name)
         fields = {
             dp["name"]: {"field": annotations[dp["name"]]["attributeName"]}
             for dp in own

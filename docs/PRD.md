@@ -116,7 +116,7 @@ to prevent a three-way fork.
 
 | Module / subpackage | Purpose |
 | --- | --- |
-| `mapping` | `MappingBundle`, `MappingResolver`, `MappingSource`, `PropertyInfo`, `IndexInfo`, `RelationshipStats`; `mapping_from_wire_dict`, `mapping_hash`; collection-name grammar guard (`COLLECTION_NAME_RE`, `is_valid_collection_name`) |
+| `mapping` | `MappingBundle`, `MappingResolver` (incl. supertypes: `SUPERTYPE_STYLES`, `is_supertype`, `supertype_members`), `MappingSource`, `PropertyInfo`, `IndexInfo`, `RelationshipStats`; `mapping_from_wire_dict`, `mapping_hash`; collection-name grammar guard (`COLLECTION_NAME_RE`, `is_valid_collection_name`) |
 | `owl_turtle` / `owl_rdflib` | OWL/Turtle ⇄ MappingBundle round-trip; rdflib parser behind the `owl` extra (import degrades to `None` without it) |
 | `aql` | `AqlFragment`, `AqlQuery` value types |
 | `exec` | `AqlExecutor` protocol, `safe_execute` (bind-var reference checking), `explain_aql` |
@@ -149,6 +149,24 @@ to prevent a three-way fork.
 - **R5 — Deterministic contract types.** `mapping_hash` over a bundle
   is stable across processes (canonical JSON) so consumers can use it
   for cache keys and change detection.
+- **R7 — Label hierarchies (supertypes).** A supertype is a label whose
+  instances are the instances of other labels (LDBC's `Message` is every
+  `Post` and every `Comment`).
+  - **Styles.** It is mapped with one of two entity styles (`SUPERTYPE_STYLES`):
+    - `MULTI_LABEL`: the members share one collection, and documents list
+      their labels in an array field (`labelsField`, `labelValue`).
+    - `UNION`: the members have collections of their own (`members`).
+  - **Members** come from the physical `members` list or the conceptual
+    entity's `subtypes`.
+  - **Resolver.** `MappingResolver.supertype_members()` flattens nested
+    supertypes, and refuses unknown members and cycles (`INVALID_MAPPING`).
+    A supertype without properties of its own has its members' properties.
+    `edge_constrains_target` treats a supertype target as guaranteed when
+    every class an edge endpoint can be is a member.
+  - **New styles fail closed.** Supertypes get styles of their own, so a
+    consumer that does not handle them rejects the mapping instead of
+    misreading it.
+  - **OWL.** OWL/Turtle round-trips the hierarchy as `rdfs:subClassOf`.
 - **R6 — Quality gates.** ruff (lint + format), mypy, and pytest run in
   CI on every push/PR; all three must pass before a release is tagged.
 

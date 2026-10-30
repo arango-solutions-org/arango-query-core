@@ -1,6 +1,6 @@
 [project]
 name = "arango-query-core"
-version = "0.2.4"
+version = "0.2.6"
 description = "Shared conceptual-model and NL substrate for ArangoDB query transpilers (arango-cypher-py, arango-sparql-py)"
 readme = "README.md"
 license = { file = "LICENSE" }

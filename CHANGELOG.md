@@ -16,11 +16,53 @@ and this file must say so explicitly.
   `"Label" IN doc.labels`). `resolve_entity` returns it unchanged,
   `schema_summary` reports `labelsField`, and the OWL Turtle export/import and
   the rdflib import carry `phys:labelsField`. Shared with arango-gql-gateway,
-  so a mapping from either tool works in either.
+  so a mapping from either tool works in either. Distinct from `MULTI_LABEL`
+  (0.2.5, below): `LABELS` is a plain entity whose own declared name is the
+  array value to match; `MULTI_LABEL` is a supertype matching a separate,
+  explicit `labelValue` across its members' shared collection.
 - `CATCH_ALL_KEY` (`"*"`): a `*` key under `entities` or `relationships`
   resolves any label or type with no entry of its own, after exact and
   normalized lookup. It is not listed by `all_entity_labels` /
   `all_relationship_types`. Bundles without a `*` key behave as before.
+
+## [0.2.6] - 2026-10-29
+
+### Added
+
+- **Temporal property encodings.** A property may declare how its temporal
+  values are stored, `"encoding": "epoch_ms"` (integer milliseconds since the
+  epoch) or `"iso8601"` (an ISO-8601 string), read into
+  `PropertyInfo.encoding` (empty when not declared) and carried by
+  `schema_summary()`. Any other value is refused with `INVALID_MAPPING`.
+  The vocabulary is `TEMPORAL_ENCODINGS`. It is a physical detail, like
+  `field`, so OWL/Turtle does not carry it. arango-cypher-py lowers temporal
+  accessors, functions and arithmetic from it (LDBC WP-41).
+
+## [0.2.5] - 2026-10-26
+
+### Added
+
+- **Supertypes (label hierarchies).** A supertype is a label that stands for
+  other labels, such as LDBC's `Message`, which is every `Post` and every
+  `Comment`. It is mapped with one of two new entity styles,
+  `SUPERTYPE_STYLES`:
+  - `MULTI_LABEL`: the members share a collection and list their labels in
+    an array field (`labelsField`, `labelValue`);
+  - `UNION`: the members have their own collections (`members`).
+- **New resolver methods.** `MappingResolver.is_supertype()` and
+  `supertype_members()`. The latter flattens nested supertypes and refuses
+  unknown members and cycles with `INVALID_MAPPING`. A supertype without
+  properties of its own has its members' properties.
+- **`edge_constrains_target`** treats a supertype target as guaranteed when
+  every class an edge endpoint can be is a member: `HAS_CREATOR`'s domain
+  `[Post, Comment]` guarantees `Message`.
+- **OWL/Turtle** writes and reads the hierarchy as `rdfs:subClassOf`.
+  `turtle_to_mapping` no longer invents a `collectionName` for a `UNION`
+  supertype. The rdflib parser does not read `rdfs:subClassOf` yet.
+
+The change is additive: mappings without the new styles resolve exactly as
+before. A consumer that switches on `style` and does not handle the new
+values rejects them rather than misreading them.
 
 ## [0.2.4] - 2026-10-21
 

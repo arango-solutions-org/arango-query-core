@@ -4,6 +4,8 @@ from .exec import AqlExecutor, explain_aql, safe_execute
 from .extensions import ExtensionPolicy, ExtensionRegistry
 from .mapping import (
     COLLECTION_NAME_RE,
+    SUPERTYPE_STYLES,
+    TEMPORAL_ENCODINGS,
     IndexInfo,
     MappingBundle,
     MappingResolver,
@@ -23,6 +25,8 @@ except ImportError:
 
 __all__ = [
     "COLLECTION_NAME_RE",
+    "SUPERTYPE_STYLES",
+    "TEMPORAL_ENCODINGS",
     "AqlExecutor",
     "AqlFragment",
     "AqlQuery",
