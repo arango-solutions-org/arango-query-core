@@ -6,6 +6,40 @@ exact versions (contextual-data-fabric CC-9) and re-run their golden /
 eval suites on every bump — pre-1.0, **minor** bumps may break the API
 and this file must say so explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **Host extensions** (`arango_query_core.nl.host`). A host whose engine
+  accepts more than the target language can now say so without rewriting
+  the adapter's grammar section. `HostExtensions` declares:
+  - `predicates`: `HostPredicate`, a predicate the host's engine accepts
+    (such as a registered text match), the `Class.property` names it may be
+    used on, what not to write instead, and where the engine refuses it;
+  - `rules`: the host's own limits that are not about one property, one
+    sentence each;
+  - `properties`: `PropertyFact`, per-property facts (`type`, `required`,
+    `orderable`, `description`; names follow `PropertyInfo`).
+
+  `host_prompt_section()` renders them as one section that adds to the
+  grammar and says that everything the grammar forbids stays forbidden.
+  Host prose is collapsed to one line, capped at 600 characters, and has
+  runs of `#` collapsed, so it cannot open a prompt section or carry the
+  `## Examples` cache marker. Names are validated when built. All four
+  names are exported from `arango_query_core.nl`.
+- **`NLQueryEngine.host_extensions`**, `None` by default. The section goes
+  straight after the grammar section, inside the cacheable prefix, before
+  `## Examples`. With `None`, or a declaration that renders nothing, the
+  system prompt is byte-identical to 0.2.6's.
+
+### Fixed
+
+- The engine comment and the `nl.postconditions` docstrings claimed that
+  postcondition prompt sections stay inside the cacheable prefix. They are
+  appended last, so when a `## Examples` section is present they fall after
+  `split_system_for_anthropic_cache`'s split. Comments only; behaviour is
+  unchanged.
+
 ## [0.2.6] - 2026-10-29
 
 ### Added

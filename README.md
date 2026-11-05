@@ -20,6 +20,7 @@ fabric pin one artifact instead of forking the same code three ways.
 | `arango_query_core.nl` | Language-agnostic NL→query engine: LLM providers (OpenAI / OpenRouter / Anthropic with prompt caching), BM25/dense few-shot retrieval, caller-supplied semantic postconditions, and the generate→validate→repair loop |
 | `arango_query_core.nl.seams` | `QueryLanguageAdapter` — the eight language-specific seams an adapter implements (grammar prompt, corpus, validator, repair rules, guardrails, entity/predicate/path grounding) |
 | `arango_query_core.nl.grounding` / `pathindex` | Entity, predicate, and relationship-path grounding retrieval (seams 6-8) — inject known IDs, schema conventions, and navigation hints into the prompt |
+| `arango_query_core.nl.host` | `HostExtensions` — what the host's engine accepts beyond the target language (registered predicates, per-property facts, its own limits), rendered after the grammar section via `NLQueryEngine(host_extensions=...)` |
 | `arango_query_core.nl.postconditions` | Caller-supplied semantic invariants enforced through the same generate→validate→retry budget, failing closed on exhaustion |
 | `arango_query_core.nl.synthbank` | Ontology-agnostic query-shape template catalog for synthetic few-shot bank generation |
 
