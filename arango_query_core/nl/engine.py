@@ -89,7 +89,8 @@ class NLQueryEngine:
 
     ``host_extensions`` (:mod:`~arango_query_core.nl.host`) is rendered straight
     after the grammar section, before ``## Examples``, so it is part of the
-    cacheable prefix.
+    cacheable prefix. Caller postconditions' prompt sections come last; when a
+    ``## Examples`` section is present they therefore fall after the cache split.
     """
 
     provider: LLMProvider
@@ -268,9 +269,10 @@ class NLQueryEngine:
             if path_block:
                 sections.append(path_block)
         # Caller postconditions announce their invariants up front so the model
-        # aims to satisfy them, not just get corrected after breaking one. These
-        # are static per call (no per-question content), so they stay inside the
-        # cacheable prefix rather than after the few-shot cache boundary.
+        # aims to satisfy them, not just get corrected after breaking one. They are
+        # static per call but appended last: when an ``## Examples`` section is
+        # present, split_system_for_anthropic_cache splits there and these land in
+        # the uncached suffix; without one, the whole prompt is a single cached block.
         sections.extend(postcondition_prompt_sections(self.postconditions))
         return "\n\n".join(s for s in sections if s)
 

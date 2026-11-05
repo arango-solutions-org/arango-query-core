@@ -20,7 +20,9 @@ from arango_query_core.nl import (
     PostconditionViolation,
     ValidationResult,
     run_postconditions,
+    split_system_for_anthropic_cache,
 )
+from arango_query_core.nl.fewshot import FewShotIndex
 
 
 class FakeProvider:
@@ -176,6 +178,29 @@ def test_prompt_section_rendered_once_in_system_prompt():
     assert system.count("INVARIANT: every query MUST include a LIMIT clause.") == 1
     # system prefix is stable across attempts (cache-friendly)
     assert eng.provider.calls[0][0] == eng.provider.calls[1][0]
+
+
+class _OneExample:
+    def retrieve(self, question, k=3):
+        return [("list everything", "SELECT * LIMIT 10")]
+
+
+class ExamplesAdapter(FakeAdapter):
+    def few_shot_index(self):
+        return FewShotIndex(_OneExample())
+
+
+def test_prompt_section_when_examples_present_should_fall_after_the_cache_split():
+    eng = NLQueryEngine(provider=FakeProvider([]), adapter=ExamplesAdapter(), postconditions=[NeedsLimit()])
+    cached, uncached = split_system_for_anthropic_cache(eng._system_prompt("q", ""))
+    assert "INVARIANT" not in cached["text"]
+    assert uncached["text"].endswith("INVARIANT: every query MUST include a LIMIT clause.")
+
+
+def test_prompt_section_when_no_examples_should_stay_in_the_single_cached_block():
+    eng = _engine([], [NeedsLimit()])
+    (block,) = split_system_for_anthropic_cache(eng._system_prompt("q", ""))
+    assert "cache_control" in block and "INVARIANT" in block["text"]
 
 
 def test_postconditions_only_run_on_valid_queries():
