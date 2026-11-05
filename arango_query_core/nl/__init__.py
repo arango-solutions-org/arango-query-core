@@ -9,6 +9,7 @@ enters exclusively through :class:`~arango_query_core.nl.seams.QueryLanguageAdap
 from .engine import NLQueryEngine, NLResult
 from .fewshot import BM25Retriever, DenseRetriever, FewShotIndex, Retriever, cached_few_shot_index
 from .grounding import GroundedEntity, GroundedPredicate, LabelIndex, PredicateIndex
+from .host import HostExtensions, HostPredicate, PropertyFact, host_prompt_section
 from .pathindex import ClassPath, ClassPathIndex
 from .postconditions import (
     Postcondition,
@@ -38,6 +39,8 @@ __all__ = [
     "GroundedEntity",
     "GroundedPredicate",
     "GuardrailVerdict",
+    "HostExtensions",
+    "HostPredicate",
     "LabelIndex",
     "LLMProvider",
     "NLQueryEngine",
@@ -48,6 +51,7 @@ __all__ = [
     "PostconditionContext",
     "PostconditionViolation",
     "PredicateIndex",
+    "PropertyFact",
     "QueryLanguageAdapter",
     "Retriever",
     "SHAPE_CATALOG",
@@ -55,6 +59,7 @@ __all__ = [
     "ValidationResult",
     "cached_few_shot_index",
     "get_llm_provider",
+    "host_prompt_section",
     "postcondition_prompt_sections",
     "run_postconditions",
     "split_system_for_anthropic_cache",
