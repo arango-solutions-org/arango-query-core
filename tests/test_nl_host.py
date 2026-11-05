@@ -4,6 +4,7 @@ placement and byte-identity are in ``tests/test_nl_engine_host_extensions.py``."
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -220,9 +221,11 @@ def test_property_fact_when_name_malformed_should_raise(entity: str, prop: str) 
 
 
 def test_module_when_read_should_name_no_host() -> None:
+    """Generic by construction: no namespace or IRI of any host, and nothing imported
+    beyond the standard library and this package."""
     source = Path(h.__file__).read_text(encoding="utf-8")
-    for word in ("cdf", "contextual", "fabric", "matchestext"):
-        assert word not in source.lower()
+    assert re.search(r"https?://|urn:", source) is None
+    assert set(re.findall(r"\b([a-z]+):[A-Za-z]", source)) <= {"ex", "mod", "class", "func", "data", "meth"}
     imports = {line for line in source.splitlines() if line.startswith(("import ", "from "))}
     assert imports == {
         "from __future__ import annotations",
