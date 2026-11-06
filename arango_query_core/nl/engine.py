@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from .host import HostExtensions, host_prompt_section
 from .postconditions import (
     Postcondition,
     PostconditionContext,
@@ -85,6 +86,11 @@ class NLQueryEngine:
     adapter's path index (seam 8) and rendered AFTER the predicate
     section — same post-cache-boundary discipline; the adapter resolves
     the anchor/target identifiers from its own seam-6/7 state (D-02).
+
+    ``host_extensions`` (:mod:`~arango_query_core.nl.host`) is rendered straight
+    after the grammar section, before ``## Examples``, so it is part of the
+    cacheable prefix. Caller postconditions' prompt sections come last; when a
+    ``## Examples`` section is present they therefore fall after the cache split.
     """
 
     provider: LLMProvider
@@ -103,6 +109,11 @@ class NLQueryEngine:
     on :attr:`NLResult.provider_errors`. If no attempt ever returned a
     response, the last exception is re-raised. False (the default) lets the
     first exception propagate, as before."""
+    host_extensions: HostExtensions | None = None
+    """What the host's engine accepts beyond the target language (:mod:`.host`),
+    rendered straight after the grammar section, inside the cacheable prefix.
+    ``None`` or a declaration that renders nothing leaves the system prompt
+    byte-identical."""
 
     def generate(self, question: str, *, schema_context: str = "", user_hint: str = "") -> NLResult:
         """Generate a query for *question*.
@@ -232,6 +243,9 @@ class NLQueryEngine:
 
     def _system_prompt(self, question: str, schema_context: str) -> str:
         sections = [self.adapter.grammar_prompt_section(schema_context)]
+        # Static per engine, so it sits with the grammar, before the ``## Examples``
+        # cache boundary. ``""`` when nothing is declared, and the join drops it.
+        sections.append(host_prompt_section(self.host_extensions))
         index = self.adapter.few_shot_index()
         if index is not None:
             examples = index.format_prompt_section(
@@ -255,9 +269,10 @@ class NLQueryEngine:
             if path_block:
                 sections.append(path_block)
         # Caller postconditions announce their invariants up front so the model
-        # aims to satisfy them, not just get corrected after breaking one. These
-        # are static per call (no per-question content), so they stay inside the
-        # cacheable prefix rather than after the few-shot cache boundary.
+        # aims to satisfy them, not just get corrected after breaking one. They are
+        # static per call but appended last: when an ``## Examples`` section is
+        # present, split_system_for_anthropic_cache splits there and these land in
+        # the uncached suffix; without one, the whole prompt is a single cached block.
         sections.extend(postcondition_prompt_sections(self.postconditions))
         return "\n\n".join(s for s in sections if s)
 

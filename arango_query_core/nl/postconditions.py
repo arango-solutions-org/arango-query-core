@@ -12,8 +12,8 @@ a required filter. No syntactic check sees it and no human sees it in a demo.
 
 A postcondition is a caller-supplied invariant. It rides the *same* retry
 budget as parse and translate: the model is told the rule up front (via
-:meth:`Postcondition.prompt_section`, rendered once into the cacheable system
-prefix), and a violation is fed back into the next prompt exactly like a
+:meth:`Postcondition.prompt_section`, rendered once at the end of the system
+prompt), and a violation is fed back into the next prompt exactly like a
 validation failure — so the loop gets a chance to *correct* the query rather
 than just reject it, and fails closed when the budget is spent — unless a
 candidate drew only a *soft* violation (``PostconditionViolation.soft``), in
@@ -167,9 +167,11 @@ def postcondition_prompt_sections(
 ) -> list[str]:
     """Collect non-empty ``prompt_section()`` output, in caller order.
 
-    Rendered once into the cacheable system prefix by the engine, so a check
-    that raises here (a broken ``prompt_section``) is skipped rather than
-    aborting the whole generation.
+    Rendered once, at the end of the system prompt, by the engine. When the
+    prompt has an ``## Examples`` section the sections fall after
+    :func:`~arango_query_core.nl.providers.split_system_for_anthropic_cache`'s
+    split, in the uncached suffix. A check that raises here (a broken
+    ``prompt_section``) is skipped rather than aborting the whole generation.
     """
     if not postconditions:
         return []
