@@ -23,7 +23,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from .host import HostExtensions, host_prompt_section
+from .host import HostExtensions, _clean, host_prompt_section
 from .postconditions import (
     Postcondition,
     PostconditionContext,
@@ -115,7 +115,14 @@ class NLQueryEngine:
     ``None`` or a declaration that renders nothing leaves the system prompt
     byte-identical."""
 
-    def generate(self, question: str, *, schema_context: str = "", user_hint: str = "") -> NLResult:
+    def generate(
+        self,
+        question: str,
+        *,
+        schema_context: str = "",
+        user_hint: str = "",
+        context: str = "",
+    ) -> NLResult:
         """Generate a query for *question*.
 
         *user_hint* is appended to the **first** attempt's user message only —
@@ -123,10 +130,21 @@ class NLQueryEngine:
         failure. It leaves the system prompt (the cacheable prefix), few-shot
         retrieval and postcondition context untouched; retries carry their own
         "previous query was rejected" text.
+
+        *context* follows the question on **every** attempt, repairs included: a
+        fact about this request that the answer depends on, such as the date that
+        relative words ("this quarter", "the last 30 days") are counted from. It is
+        reduced to one line of at most 600 characters by the rule :mod:`.host`
+        applies to host prose, and it never reaches the system prompt, retrieval
+        or :attr:`PostconditionContext.question`, so a check that reads the
+        asker's words never reads it. The engine gives it no meaning. Empty, or
+        empty once cleaned, means a byte-identical request.
         """
         result = NLResult()
         system = self._system_prompt(question, schema_context)
-        user = f"{question}\n\n{user_hint}" if user_hint else question
+        note = _clean(context)
+        asked = f"{question}\n\n{note}" if note else question
+        user = f"{asked}\n\n{user_hint}" if user_hint else asked
         last_provider_error: Exception | None = None
         failure: ValidationResult | None = None
         violation: PostconditionViolation | None = None
@@ -145,7 +163,7 @@ class NLQueryEngine:
                     assert failure is not None
                     hint = self.adapter.repair_hint(candidate, failure) or failure.error
                 user = (
-                    f"{question}\n\n"
+                    f"{asked}\n\n"
                     f"Your previous {self.adapter.language} query was rejected:\n"
                     f"```{self.adapter.language}\n{candidate}\n```\n"
                     f"Problem: {hint}\n"
