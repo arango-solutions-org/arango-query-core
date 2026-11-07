@@ -6,7 +6,7 @@ exact versions (contextual-data-fabric CC-9) and re-run their golden /
 eval suites on every bump — pre-1.0, **minor** bumps may break the API
 and this file must say so explicitly.
 
-## [Unreleased]
+## [0.2.7] - 2026-11-06
 
 ### Added
 
