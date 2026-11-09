@@ -31,6 +31,14 @@ and this file must say so explicitly.
   straight after the grammar section, inside the cacheable prefix, before
   `## Examples`. With `None`, or a declaration that renders nothing, the
   system prompt is byte-identical to 0.2.6's.
+- **`NLQueryEngine.generate(context=...)`**, `""` by default. A fact about one
+  request that the answer depends on, such as the date that "this quarter" or
+  "the last 30 days" is counted from. It follows the question in the user
+  message of **every** attempt, repairs included, where `user_hint` reaches the
+  first attempt only. It is cleaned by the host-prose rule (one line, runs of
+  `#` collapsed, at most 600 characters) and never reaches the system prompt,
+  retrieval or `PostconditionContext.question`. Empty, or empty once cleaned,
+  every request is byte-identical to before.
 
 ### Fixed
 
