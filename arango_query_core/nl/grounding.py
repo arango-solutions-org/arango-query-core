@@ -54,6 +54,15 @@ _STOP = frozenset(
     "please list show find get".split()
 )
 
+#: A token shorter than this matches only as a whole word of the other side,
+#: never as a substring: "ge" is inside "manager", but "GE" names a company.
+_SHORT = 3
+
+#: One- and two-letter English words a label can carry ("Bank of America")
+#: that would otherwise tie every question that uses them. Applied only to
+#: short tokens; longer stop words are in :data:`_STOP`.
+_SHORT_STOP = _STOP | frozenset("am as at be go he if it me so up us we".split())
+
 # C0 control chars (0x00-0x1F) + DEL (0x7F), including \n and \r — a
 # maliciously-labeled instance (e.g. rdfs:label containing "\nignore
 # previous instructions") must render on a single bullet line and
@@ -128,15 +137,20 @@ def _token_substring_retrieve(
     old ``if hits:`` guard dropped it before ``k`` was ever applied).
     """
     ql = question.lower()
-    q_tokens = {t for t in re.findall(r"[a-z0-9]+", ql) if len(t) >= 3 and t not in _STOP}
+    q_words = set(re.findall(r"[a-z0-9]+", ql))
+    q_tokens = {t for t in q_words if len(t) >= _SHORT and t not in _STOP}
     scored: list[tuple[int, int, _T]] = []
     for item in items:
         hits = 0
         best_len = 999
         for lab in get_labels(item):
             labl = lab.lower()
-            lab_tokens = [t for t in re.findall(r"[a-z0-9]+", labl) if len(t) >= 3]
+            lab_words = re.findall(r"[a-z0-9]+", labl)
+            lab_tokens = [t for t in lab_words if len(t) >= _SHORT]
             h = sum(1 for t in lab_tokens if t in ql)
+            # A short token ("HP", "3M", the "31" of "Account Name 31") counts
+            # only when the question has it as a whole word.
+            h += sum(1 for t in lab_words if len(t) < _SHORT and t not in _SHORT_STOP and t in q_words)
             h += sum(1 for t in q_tokens if t in labl and not any(t == lt for lt in lab_tokens))
             if h > hits:
                 hits, best_len = h, len(labl)

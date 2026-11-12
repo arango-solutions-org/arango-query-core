@@ -38,6 +38,53 @@ def test_topk_and_ranking() -> None:
     assert top2[1] == e2
 
 
+def _companies() -> list[GroundedEntity]:
+    """Short-named companies among longer names, as a CRM's account list holds them."""
+    names = ["HP", "GE", "3M", "EY", "AT&T", "Acme Holdings", "Meridian Logistics", "Bank of America"]
+    names += [f"{a} {n}" for a in ("Blue", "Atlas", "Golden") for n in ("Systems", "Energy", "Media")]
+    return [GroundedEntity(id=n, labels=(n,), type="Account") for n in names]
+
+
+def test_short_name_is_found_as_a_whole_word() -> None:
+    # A name whose only distinctive word is under three characters ("HP",
+    # "GE", "3M") was never retrieved: the scorer dropped every such token.
+    index = LabelIndex(_companies())
+    for question, name in [
+        ("Who owns HP?", "HP"),
+        ("What is the ARR of GE?", "GE"),
+        ("When does 3M renew?", "3M"),
+        ("Show EY's open opportunities", "EY"),
+        ("Who is the account owner for AT&T?", "AT&T"),
+    ]:
+        assert [e.id for e in index.retrieve(question)][:1] == [name], question
+
+
+def test_short_token_does_not_match_inside_a_longer_word() -> None:
+    # "ge" is inside "manager" and "changed"; "hp" and "ey" inside nothing here.
+    # A short token counts only as a whole word, so none of these are offered.
+    index = LabelIndex(_companies())
+    for question in ("Who is the account manager?", "What changed in usage?", "Which keys expire?"):
+        ids = {e.id for e in index.retrieve(question)}
+        assert not ids & {"HP", "GE", "3M", "EY", "AT&T"}, (question, ids)
+
+
+def test_short_stopword_in_a_label_matches_nothing() -> None:
+    # "of" in "Bank of America" must not tie every question that says "of".
+    index = LabelIndex(_companies())
+    assert "Bank of America" not in {e.id for e in index.retrieve("list of all renewals")}
+
+
+def test_number_in_a_name_ranks_its_own_name_first() -> None:
+    # "Account Name 31" differs from its neighbours only by a two-digit number;
+    # "31" must pick it out, and must not match inside "131" or "2031".
+    names = [f"Account Name {n}" for n in range(1, 201)]
+    index = LabelIndex([GroundedEntity(id=n, labels=(n,), type="") for n in names])
+    assert index.retrieve("Who is the owner of Account Name 31?")[0].id == "Account Name 31"
+    assert index.retrieve("Who is the owner of Account Name 7?")[0].id == "Account Name 7"
+    top = [e.id for e in index.retrieve("renewals of Account Name due in 2031")]
+    assert "Account Name 31" not in top[:1]
+
+
 def test_empty_on_no_match() -> None:
     entity = GroundedEntity(id="http://ex.org/x", labels=("Completely Unrelated",), type="")
     index = LabelIndex([entity])
