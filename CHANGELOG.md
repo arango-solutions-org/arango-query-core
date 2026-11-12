@@ -6,6 +6,24 @@ exact versions (contextual-data-fabric CC-9) and re-run their golden /
 eval suites on every bump — pre-1.0, **minor** bumps may break the API
 and this file must say so explicitly.
 
+## [0.2.9] - 2026-11-12
+
+### Fixed
+
+- **Grounding finds a name told apart by a short token.** The scorer shared by
+  `LabelIndex` and `PredicateIndex` dropped every token under three
+  characters, so "HP Inc.", "GE Co.", "3M Co.", "AT&T Inc." or the "31" of
+  "Account Name 31" among "Account Name 1" to "200" was never retrieved, even
+  when the question gave the exact stored name. A token under three characters
+  now counts when the question holds it as a whole word, never as a substring
+  ("GE" is not found in "manager"). Before short words are read, possessive and
+  contraction endings are removed ("Media's", "don't"), accented words stay
+  whole ("Société" yields no "t"), a repeated short token counts once ("J&J"),
+  and one- and two-letter English words ("of", "at", "ok") are not counted.
+  Tokens of three or more characters match exactly as before. Retrieval can
+  only gain results; an item that matched before keeps its long-token hits, so
+  its rank changes only against items that now also match a short token.
+
 ## [0.2.7] - 2026-11-06
 
 ### Added
