@@ -74,6 +74,34 @@ def test_short_stopword_in_a_label_matches_nothing() -> None:
     assert "Bank of America" not in {e.id for e in index.retrieve("list of all renewals")}
 
 
+def test_possessive_and_contraction_leave_no_short_fragment() -> None:
+    # "Media's" and "don't" must not yield a token "s" or "t" that matches
+    # "S.p.A." or "AT&T"; a possessive still finds its exact name first.
+    names = ["Atlas Media", "Atlas Media S.p.A.", "AT&T", "Macy's", "Acme"]
+    index = LabelIndex([GroundedEntity(id=n, labels=(n,), type="") for n in names])
+    assert index.retrieve("What is Atlas Media's ARR?")[0].id == "Atlas Media"
+    assert index.retrieve("Which accounts don't renew?") == []
+    assert index.retrieve("Who's the owner?") == []
+    assert index.retrieve("Who owns Macy's?")[0].id == "Macy's"
+
+
+def test_accented_name_yields_no_short_fragments() -> None:
+    # "Société Générale" splits, ASCII-wise, into "soci t g n rale"; its short
+    # pieces must not match a question's stray letters.
+    entity = GroundedEntity(id="SG", labels=("Société Générale",), type="")
+    index = LabelIndex([entity])
+    assert index.retrieve("plan t for g n accounts") == []
+    assert index.retrieve("What is Société Générale's ARR?") == [entity]
+
+
+def test_repeated_short_token_counts_once() -> None:
+    # "J&J" holds "j" twice; counted twice it would outrank the label "J".
+    # Counted once, the two tie and the shorter label wins.
+    names = ["J&J", "J"]
+    index = LabelIndex([GroundedEntity(id=n, labels=(n,), type="") for n in names])
+    assert [e.id for e in index.retrieve("Who is J?")] == ["J", "J&J"]
+
+
 def test_number_in_a_name_ranks_its_own_name_first() -> None:
     # "Account Name 31" differs from its neighbours only by a two-digit number;
     # "31" must pick it out, and must not match inside "131" or "2031".

@@ -61,7 +61,21 @@ _SHORT = 3
 #: One- and two-letter English words a label can carry ("Bank of America")
 #: that would otherwise tie every question that uses them. Applied only to
 #: short tokens; longer stop words are in :data:`_STOP`.
-_SHORT_STOP = _STOP | frozenset("am as at be go he if it me so up us we".split())
+_SHORT_STOP = _STOP | frozenset("am as at be go he if it me ok pm so up us vs we".split())
+
+#: An English possessive or contraction ending: "Media's", "don't", "we'll".
+_CLITIC = re.compile(r"['’](?:s|t|d|m|ll|re|ve)\b")
+
+
+def _short_words(text: str) -> set[str]:
+    """The whole words of ``text`` under :data:`_SHORT` characters, as a short
+    token may match them: possessive and contraction endings removed first
+    (no "s" from "Media's", no "t" from "don't"), and words split on any
+    non-letter, accented letters included, so "Société" stays one word and
+    yields no "t" or "g". A set, so a label repeating one ("J&J") counts it once."""
+    words = re.findall(r"[^\W_]+", _CLITIC.sub("", text.lower()))
+    return {w for w in words if len(w) < _SHORT and w not in _SHORT_STOP}
+
 
 # C0 control chars (0x00-0x1F) + DEL (0x7F), including \n and \r — a
 # maliciously-labeled instance (e.g. rdfs:label containing "\nignore
@@ -112,7 +126,10 @@ def _token_substring_retrieve(
     dump: bool = False,
 ) -> list[_T]:
     """Top-k items whose ``get_labels(item)`` tokens appear (as
-    substrings) in the question, or vice versa.
+    substrings) in the question, or vice versa. A token of three or more
+    characters matches as a substring; a shorter one ("HP", "3M", "31")
+    only as a whole word of the question (:func:`_short_words`), since as a
+    substring "ge" would be found in "manager".
 
     Both-direction substring matching survives plural/inflection
     mismatches (e.g. "Transistors" in the question vs. a "Transistor"
@@ -137,20 +154,19 @@ def _token_substring_retrieve(
     old ``if hits:`` guard dropped it before ``k`` was ever applied).
     """
     ql = question.lower()
-    q_words = set(re.findall(r"[a-z0-9]+", ql))
-    q_tokens = {t for t in q_words if len(t) >= _SHORT and t not in _STOP}
+    q_tokens = {t for t in re.findall(r"[a-z0-9]+", ql) if len(t) >= _SHORT and t not in _STOP}
+    q_short = _short_words(question)
     scored: list[tuple[int, int, _T]] = []
     for item in items:
         hits = 0
         best_len = 999
         for lab in get_labels(item):
             labl = lab.lower()
-            lab_words = re.findall(r"[a-z0-9]+", labl)
-            lab_tokens = [t for t in lab_words if len(t) >= _SHORT]
+            lab_tokens = [t for t in re.findall(r"[a-z0-9]+", labl) if len(t) >= _SHORT]
             h = sum(1 for t in lab_tokens if t in ql)
             # A short token ("HP", "3M", the "31" of "Account Name 31") counts
-            # only when the question has it as a whole word.
-            h += sum(1 for t in lab_words if len(t) < _SHORT and t not in _SHORT_STOP and t in q_words)
+            # only when the question has it as a whole word (:func:`_short_words`).
+            h += len(_short_words(lab) & q_short)
             h += sum(1 for t in q_tokens if t in labl and not any(t == lt for lt in lab_tokens))
             if h > hits:
                 hits, best_len = h, len(labl)
