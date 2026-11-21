@@ -385,17 +385,3 @@ def get_llm_provider() -> LLMProvider | None:
     if has_anthropic:
         return AnthropicProvider()
     return None
-
-
-_DEFAULT_PROVIDER: LLMProvider | None = None
-_DEFAULT_PROVIDER_RESOLVED = False
-
-
-def _get_default_provider() -> LLMProvider | None:
-    """Lazily create a default LLM provider via :func:`get_llm_provider`."""
-    global _DEFAULT_PROVIDER, _DEFAULT_PROVIDER_RESOLVED
-    if _DEFAULT_PROVIDER_RESOLVED:
-        return _DEFAULT_PROVIDER
-    _DEFAULT_PROVIDER = get_llm_provider()
-    _DEFAULT_PROVIDER_RESOLVED = True
-    return _DEFAULT_PROVIDER

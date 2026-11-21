@@ -444,9 +444,6 @@ _register(
     )
 )
 
-# Name -> ShapeTemplate, built once after every shape is registered above.
-_SHAPES_BY_NAME: dict[str, ShapeTemplate] = {t.name: t for t in SHAPE_CATALOG}
-
 
 __all__ = [
     "RDFS_LABEL_IRI",
