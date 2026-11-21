@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Review an open arango-query-core pull request end to end — independently verify mergeability and the full CI gate (pytest, ruff, mypy) in an isolated worktree, trace the diff for correctness, and report a clear merge/no-merge recommendation. Use when asked to look at, review, or check a PR in this repo, or before merging one.
+description: Review an open arango-query-core pull request end to end — independently verify mergeability and the full CI gate (pytest, ruff, mypy) in an isolated worktree, trace the diff for correctness, run the code-quality skill's simplicity/reuse lens over the same diff, and report a clear merge/no-merge recommendation. Use when asked to look at, review, or check a PR in this repo, or before merging one.
 ---
 
 # PR review (arango-query-core)
@@ -92,14 +92,26 @@ Specifically check:
   effectively lying about its own contents (see Repo shape above) — flag it
   even though it's not this PR's fault to fix.
 
-### 5. Report
+### 5. Run the quality lens
+Invoke the `code-quality` skill's diff-scoped mode (`/code-quality review
+<target>`) against this PR's diff, or apply its necessity ladder directly if
+invoking it standalone doesn't fit the flow. This is a different question
+from steps 1-4: not "is this safe to merge" but "does this need to exist, and
+is it the simplest form that works" — unnecessary complexity or a reuse miss
+is a quality finding, not a mergeability blocker, and doesn't change the
+merge recommendation on its own. Keep the never-cut list in mind: don't flag
+trust-boundary validation, security checks, sanitization, or data-loss
+handling as unnecessary complexity.
+
+### 6. Report
 State plainly: what the PR does, the hand-traced correctness notes, the
 independent verification results (test count, ruff, mypy, merge-tree exit
-code, CI check conclusions), any scope/changelog issues found, and an explicit
-recommend-or-not. Don't hedge if everything checks out — say so and recommend
-merging.
+code, CI check conclusions), any scope/changelog issues found, the quality
+findings from step 5 (if any — note explicitly when there are none), and an
+explicit recommend-or-not. Don't hedge if everything checks out — say so and
+recommend merging.
 
-### 6. If asked to merge
+### 7. If asked to merge
 ```bash
 gh pr merge <N> --repo arango-solutions-org/arango-query-core --merge --delete-branch
 ```
