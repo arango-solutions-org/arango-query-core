@@ -6,6 +6,17 @@ exact versions (contextual-data-fabric CC-9) and re-run their golden /
 eval suites on every bump — pre-1.0, **minor** bumps may break the API
 and this file must say so explicitly.
 
+## [0.2.10] - 2026-11-23
+
+### Fixed
+
+- **`owl_turtle`'s Turtle→MappingBundle round-trip recognized every XSD
+  datatype `owl_rdflib`'s rdflib-based importer did except `xsd:float`.**
+  A property declared `xsd:float` round-tripped to our `"string"` simple
+  type instead of `"number"`; the two modules' xsd-to-simple-type tables
+  had drifted independently. They now share one table, so both paths agree
+  on all nine recognized types.
+
 ## [0.2.9] - 2026-11-12
 
 ### Fixed
