@@ -290,13 +290,24 @@ def _to_xsd_type(t: str) -> str:
     }.get(t.lower(), "xsd:string")
 
 
+#: XSD local name (no ``xsd:`` prefix, no namespace URI) -> our simple type
+#: string. The one source of truth for the xsd-to-simple direction, shared by
+#: :func:`_from_xsd_type` (strips an ``xsd:`` prefix) and
+#: :func:`owl_rdflib._xsd_to_simple` (strips a full XMLSchema URI down to the
+#: same local name) -- so a type the OWL-import path recognizes is also
+#: recognized round-tripping our own convention, and vice versa.
+_XSD_LOCAL_TO_SIMPLE: dict[str, str] = {
+    "string": "string",
+    "integer": "integer",
+    "int": "integer",
+    "decimal": "number",
+    "double": "number",
+    "float": "number",
+    "boolean": "boolean",
+    "date": "date",
+    "dateTime": "datetime",
+}
+
+
 def _from_xsd_type(t: str) -> str:
-    return {
-        "xsd:string": "string",
-        "xsd:integer": "integer",
-        "xsd:decimal": "number",
-        "xsd:double": "number",
-        "xsd:boolean": "boolean",
-        "xsd:date": "date",
-        "xsd:dateTime": "datetime",
-    }.get(t, "string")
+    return _XSD_LOCAL_TO_SIMPLE.get(t.split(":", 1)[-1], "string")

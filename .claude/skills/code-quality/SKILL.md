@@ -90,3 +90,24 @@ highest-reach finding, not the first one found.
   Also found and fixed two dead symbols with zero callers anywhere
   (`providers.py`'s `_get_default_provider`/`_DEFAULT_PROVIDER*`,
   `synthbank.py`'s `_SHAPES_BY_NAME`) — removed in commit `5d88e9c`.
+- **2026-11-23, fixed the five open findings.** `resolve_entity`/
+  `resolve_relationship` now share one `_resolve_entity_or_relationship`
+  helper; `resolve_properties`/`resolve_indexes` now share one `_raw_mapping`
+  lookup; `schema_summary()`'s two property-dict blocks now share one
+  `_property_optional_fields` helper (`mapping.py`). The two xsd-to-simple
+  tables (`owl_turtle._from_xsd_type`, `owl_rdflib._xsd_to_simple`) now share
+  one canonical `_XSD_LOCAL_TO_SIMPLE` dict in `owl_turtle.py` — `owl_rdflib`
+  imports it rather than duplicating it, since importing the plain,
+  zero-extra-dependency `owl_turtle` module costs nothing (unlike importing
+  `nl.grounding`, which would wrongly couple the `owl` extra to the `nl`
+  extra). `owl_turtle._to_xsd_type` goes the opposite direction with its own
+  lossy alias choices and was never actually duplicated, so it was left as
+  its own table. `owl_rdflib._local_name`'s splitting bug (checked `#`
+  first and used everything after it even when a `/` followed) is fixed
+  in place, not merged with `grounding._local_name`, for the same
+  extras-coupling reason — they remain two independent, now-each-correct
+  implementations, not one shared one. Unifying the xsd tables onto
+  `owl_rdflib`'s already-correct data also fixed a latent gap: `_from_xsd_type`
+  previously had no `xsd:float` entry and fell back to `"string"`; nothing
+  tested that gap, so this is a one-line consequence of the merge, not a
+  deliberate separate fix.

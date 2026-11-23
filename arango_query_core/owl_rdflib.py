@@ -7,9 +7,11 @@ produced by Protégé, TopBraid, or any standards-compliant OWL toolchain.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .mapping import MappingBundle, MappingSource
+from .owl_turtle import _XSD_LOCAL_TO_SIMPLE
 
 
 def parse_owl_with_rdflib(turtle_text: str) -> MappingBundle:
@@ -158,26 +160,16 @@ def _domain_names(g: Any, domain: Any, owl: Any) -> list[str]:
 
 
 def _local_name(uri: Any) -> str:
-    """Extract the local (fragment / last-path-segment) name from a URI."""
+    """Extract the local (fragment / last-path-segment) name from a URI.
+
+    The true last ``#``- or ``/``-delimited segment, whichever comes last in
+    the string -- not "after the last ``#`` if any ``#`` exists", which
+    mis-splits a URI with a ``/`` after its last ``#``.
+    """
     s = str(uri)
-    if "#" in s:
-        return s.rsplit("#", 1)[1]
-    if "/" in s:
-        return s.rsplit("/", 1)[1]
-    return s
+    return re.split(r"[#/]", s)[-1] if s else s
 
 
 def _xsd_to_simple(uri: str) -> str:
     """Map an XSD datatype URI to a simple type string."""
-    mapping = {
-        "http://www.w3.org/2001/XMLSchema#string": "string",
-        "http://www.w3.org/2001/XMLSchema#integer": "integer",
-        "http://www.w3.org/2001/XMLSchema#int": "integer",
-        "http://www.w3.org/2001/XMLSchema#decimal": "number",
-        "http://www.w3.org/2001/XMLSchema#double": "number",
-        "http://www.w3.org/2001/XMLSchema#float": "number",
-        "http://www.w3.org/2001/XMLSchema#boolean": "boolean",
-        "http://www.w3.org/2001/XMLSchema#date": "date",
-        "http://www.w3.org/2001/XMLSchema#dateTime": "datetime",
-    }
-    return mapping.get(uri, "string")
+    return _XSD_LOCAL_TO_SIMPLE.get(_local_name(uri), "string")

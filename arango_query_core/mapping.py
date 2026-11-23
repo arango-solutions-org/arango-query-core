@@ -314,9 +314,9 @@ class MappingResolver:
     def __init__(self, bundle: MappingBundle):
         self.bundle = bundle
         # Lazily-built ``normalized_key -> [original_keys]`` indexes for
-        # case/separator-insensitive resolution (see :meth:`_normalize_key`).
-        self._entity_norm_index: dict[str, list[str]] | None = None
-        self._rel_norm_index: dict[str, list[str]] | None = None
+        # case/separator-insensitive resolution (see :meth:`_normalize_key`),
+        # keyed by physical_mapping table name ("entities" / "relationships").
+        self._norm_index_cache: dict[str, dict[str, list[str]]] = {}
 
     @staticmethod
     def _normalize_key(name: str) -> str:
@@ -367,56 +367,69 @@ class MappingResolver:
         resolved = table.get(candidates[0])
         return resolved if isinstance(resolved, dict) else None
 
-    def resolve_entity(self, label_or_entity: str) -> JsonObj:
+    def _resolve_entity_or_relationship(
+        self, wanted: str, *, table_key: str, noun: str, norm_kind: str, noun_plural: str
+    ) -> JsonObj:
+        """Shared body of :meth:`resolve_entity`/:meth:`resolve_relationship`:
+        direct lookup in ``physical_mapping[table_key]``, falling back to
+        case/separator-insensitive resolution (e.g. ``FIN_METRIC`` resolving to
+        an analyzer-exported ``FINMETRIC``, or ``Has_Stake_In`` to
+        ``has_stake_in``), then a "no such {noun}" error naming what's available.
+        """
         pm = self.bundle.physical_mapping
-        entities = pm.get("entities") if isinstance(pm.get("entities"), dict) else {}
-        if not isinstance(entities, dict):
-            entities = {}
-        mapping = entities.get(label_or_entity)
-        if not isinstance(mapping, dict):
-            # Fall back to case/separator-insensitive resolution: a Cypher label
-            # like ``FIN_METRIC`` should still resolve when the analyzer exported
-            # it as ``FINMETRIC`` (and vice-versa for casing).
-            if self._entity_norm_index is None:
-                self._entity_norm_index = self._build_norm_index(entities)
-            normalized = self._resolve_normalized(
-                label_or_entity, entities, self._entity_norm_index, kind="entity label"
-            )
-            if normalized is not None:
-                return normalized
-            available = sorted(entities.keys()) if entities else []
-            hint = (
-                f". Available entities: {', '.join(available)}"
-                if available
-                else " (mapping has no entities — did schema introspection succeed?)"
-            )
-            raise CoreError(f"No entity mapping for: {label_or_entity}{hint}", code="MAPPING_NOT_FOUND")
-        return mapping
+        table = pm.get(table_key) if isinstance(pm.get(table_key), dict) else {}
+        if not isinstance(table, dict):
+            table = {}
+        mapping = table.get(wanted)
+        if isinstance(mapping, dict):
+            return mapping
+        index = self._norm_index_cache.get(table_key)
+        if index is None:
+            index = self._build_norm_index(table)
+            self._norm_index_cache[table_key] = index
+        normalized = self._resolve_normalized(wanted, table, index, kind=norm_kind)
+        if normalized is not None:
+            return normalized
+        available = sorted(table.keys()) if table else []
+        hint = (
+            f". Available {noun_plural}: {', '.join(available)}"
+            if available
+            else f" (mapping has no {noun_plural} — did schema introspection succeed?)"
+        )
+        raise CoreError(f"No {noun} mapping for: {wanted}{hint}", code="MAPPING_NOT_FOUND")
+
+    def resolve_entity(self, label_or_entity: str) -> JsonObj:
+        return self._resolve_entity_or_relationship(
+            label_or_entity,
+            table_key="entities",
+            noun="entity",
+            norm_kind="entity label",
+            noun_plural="entities",
+        )
 
     def resolve_relationship(self, rel_type: str) -> JsonObj:
+        return self._resolve_entity_or_relationship(
+            rel_type,
+            table_key="relationships",
+            noun="relationship",
+            norm_kind="relationship type",
+            noun_plural="relationships",
+        )
+
+    def _raw_mapping(self, label_or_type: str) -> JsonObj | None:
+        """The raw physical_mapping entry for an entity label or relationship
+        type — entities first, then relationships — or ``None`` if neither
+        table has it. Shared by :meth:`resolve_properties`/:meth:`resolve_indexes`,
+        which need the raw dict rather than :meth:`resolve_entity`'s
+        normalized-fallback/error-on-miss behavior."""
         pm = self.bundle.physical_mapping
-        rels = pm.get("relationships") if isinstance(pm.get("relationships"), dict) else {}
-        if not isinstance(rels, dict):
-            rels = {}
-        mapping = rels.get(rel_type)
-        if not isinstance(mapping, dict):
-            # Case/separator-insensitive fallback: ``Has_Stake_In`` resolves to
-            # the exported ``has_stake_in`` edge type.
-            if self._rel_norm_index is None:
-                self._rel_norm_index = self._build_norm_index(rels)
-            normalized = self._resolve_normalized(
-                rel_type, rels, self._rel_norm_index, kind="relationship type"
-            )
-            if normalized is not None:
-                return normalized
-            available = sorted(rels.keys()) if rels else []
-            hint = (
-                f". Available relationships: {', '.join(available)}"
-                if available
-                else " (mapping has no relationships — did schema introspection succeed?)"
-            )
-            raise CoreError(f"No relationship mapping for: {rel_type}{hint}", code="MAPPING_NOT_FOUND")
-        return mapping
+        entities = pm.get("entities", {})
+        if isinstance(entities, dict) and label_or_type in entities:
+            return entities[label_or_type]
+        rels = pm.get("relationships", {})
+        if isinstance(rels, dict) and label_or_type in rels:
+            return rels[label_or_type]
+        return None
 
     def resolve_properties(self, label_or_type: str) -> dict[str, PropertyInfo]:
         """Return property metadata for an entity label or relationship type.
@@ -424,18 +437,7 @@ class MappingResolver:
         Looks in the entity mapping first, then relationships. Returns an empty
         dict if the label/type exists but has no properties defined.
         """
-        pm = self.bundle.physical_mapping
-        mapping: JsonObj | None = None
-
-        entities = pm.get("entities", {})
-        if isinstance(entities, dict) and label_or_type in entities:
-            mapping = entities[label_or_type]
-
-        if mapping is None:
-            rels = pm.get("relationships", {})
-            if isinstance(rels, dict) and label_or_type in rels:
-                mapping = rels[label_or_type]
-
+        mapping = self._raw_mapping(label_or_type)
         if mapping is None:
             return {}
 
@@ -661,18 +663,7 @@ class MappingResolver:
 
     def resolve_indexes(self, label_or_type: str) -> list[IndexInfo]:
         """Return index metadata for an entity label or relationship type."""
-        pm = self.bundle.physical_mapping
-        mapping: JsonObj | None = None
-
-        entities = pm.get("entities", {})
-        if isinstance(entities, dict) and label_or_type in entities:
-            mapping = entities[label_or_type]
-
-        if mapping is None:
-            rels = pm.get("relationships", {})
-            if isinstance(rels, dict) and label_or_type in rels:
-                mapping = rels[label_or_type]
-
+        mapping = self._raw_mapping(label_or_type)
         if mapping is None:
             return []
 
@@ -797,6 +788,19 @@ class MappingResolver:
                 result.append(ec)
         return result
 
+    @staticmethod
+    def _property_optional_fields(p: PropertyInfo) -> JsonObj:
+        """The :class:`PropertyInfo` fields :meth:`schema_summary` includes only
+        when truthy, shared by its entity and relationship branches (which
+        otherwise differ: entities also always include ``required``/``description``)."""
+        return {
+            **({"sentinelValues": list(p.sentinel_values)} if p.sentinel_values else {}),
+            **({"numericLike": True} if p.numeric_like else {}),
+            **({"sampleValues": list(p.sample_values)} if p.sample_values else {}),
+            **({"role": p.role} if p.role else {}),
+            **({"encoding": p.encoding} if p.encoding else {}),
+        }
+
     def schema_summary(self) -> JsonObj:
         """Return a structured summary of the full mapping for the UI graph view.
 
@@ -821,11 +825,7 @@ class MappingResolver:
                         "indexed": p.indexed,
                         "required": p.required,
                         "description": p.description,
-                        **({"sentinelValues": list(p.sentinel_values)} if p.sentinel_values else {}),
-                        **({"numericLike": True} if p.numeric_like else {}),
-                        **({"sampleValues": list(p.sample_values)} if p.sample_values else {}),
-                        **({"role": p.role} if p.role else {}),
-                        **({"encoding": p.encoding} if p.encoding else {}),
+                        **self._property_optional_fields(p),
                     }
                     for name, p in props.items()
                 },
@@ -856,11 +856,7 @@ class MappingResolver:
                         "field": p.field,
                         "type": p.type,
                         "indexed": p.indexed,
-                        **({"sentinelValues": list(p.sentinel_values)} if p.sentinel_values else {}),
-                        **({"numericLike": True} if p.numeric_like else {}),
-                        **({"sampleValues": list(p.sample_values)} if p.sample_values else {}),
-                        **({"role": p.role} if p.role else {}),
-                        **({"encoding": p.encoding} if p.encoding else {}),
+                        **self._property_optional_fields(p),
                     }
                     for name, p in props.items()
                 },
