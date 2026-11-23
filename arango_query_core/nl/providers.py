@@ -9,6 +9,7 @@ the prompt-construction and schema-analysis code in ``_core`` and
 from __future__ import annotations
 
 import os
+import warnings
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -385,3 +386,20 @@ def get_llm_provider() -> LLMProvider | None:
     if has_anthropic:
         return AnthropicProvider()
     return None
+
+
+def _get_default_provider() -> LLMProvider | None:
+    """Deprecated alias of :func:`get_llm_provider`, kept for consumers that import it.
+
+    arango-cypher-py checkouts before arango-cypher#113 import this name, so
+    removing it breaks ``import arango_cypher`` there. Remove it only as
+    ``tests/test_consumer_contract.py`` allows (``PRE_CYPHER_113``). Unlike the
+    removed original, it does not memoise: it reads the environment on each
+    call, as the public function does.
+    """
+    warnings.warn(
+        "_get_default_provider is deprecated; call arango_query_core.nl.get_llm_provider() instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_llm_provider()
